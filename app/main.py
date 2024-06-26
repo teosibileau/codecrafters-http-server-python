@@ -1,6 +1,6 @@
 
 import socket
-
+import threading
 
 class Request:
     def __init__(self, data: bytes):
@@ -40,6 +40,23 @@ class Response:
     def __repr__(self):
         return str(self)
 
+def handle_client(connection, address):
+    print(f"client Address: {address}")
+    data = connection.recv(1024)
+    if not data:
+        return
+    request = Request(data)
+
+    if request.path == "/":
+        response = Response(body="Hello World")
+    elif request.path == "/user-agent":
+        response = Response(body=request.headers.get("user-agent", ""))
+    elif request.path.startswith("/echo/"):
+        response = Response(body=request.path.split("/echo/")[1])
+    else:
+        response = Response(status_code=404, body="Not found")
+    connection.sendall(bytes(response))
+    connection.close()
 
 def main():
     print("Logs from your program will appear here!")
@@ -49,22 +66,7 @@ def main():
     try:
         while True:
             connection, address = server_socket.accept()
-            print(f"client Address: {address}")
-            data = connection.recv(1024)
-            if not data:
-                break
-            request = Request(data)
-
-            if request.path == "/":
-                response = Response(body="Hello World")
-            elif request.path == "/user-agent":
-                response = Response(body=request.headers.get("user-agent", ""))
-            elif request.path.startswith("/echo/"):
-                response = Response(body=request.path.split("/echo/")[1])
-            else:
-                response = Response(status_code=404, body="Not found")
-            connection.sendall(bytes(response))
-            connection.close()
+            threading.Thread(target=handle_client, args=(connection, address)).start()
     except KeyboardInterrupt:
         print("\nServer is shutting down.")
     finally:
