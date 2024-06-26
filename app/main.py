@@ -46,24 +46,30 @@ def main():
 
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
 
-    while True:
-        connection, address = server_socket.accept()
-        print(f"client Address: {address}")
-        data = connection.recv(1024)        
-        if not data:
-            break
-        request = Request(data)
+    try:
+        while True:
+            connection, address = server_socket.accept()
+            print(f"client Address: {address}")
+            data = connection.recv(1024)
+            if not data:
+                break
+            request = Request(data)
 
-        if request.path == "/":
-            response = Response(body="Hello World")
-        elif request.path == "/user-agent":
-            response = Response(body=request.headers.get("user-agent", ""))
-        elif request.path.startswith("/echo/"):
-            response = Response(body=request.path.split("/echo/")[1])
-        else:
-            response = Response(status_code=404, body="Not found")
-        connection.sendall(bytes(response))
-        connection.close()
+            if request.path == "/":
+                response = Response(body="Hello World")
+            elif request.path == "/user-agent":
+                response = Response(body=request.headers.get("user-agent", ""))
+            elif request.path.startswith("/echo/"):
+                response = Response(body=request.path.split("/echo/")[1])
+            else:
+                response = Response(status_code=404, body="Not found")
+            connection.sendall(bytes(response))
+            connection.close()
+    except KeyboardInterrupt:
+        print("\nServer is shutting down.")
+    finally:
+        server_socket.close()
+        print("Server has been shut down.")
 
 
 if __name__ == "__main__":
