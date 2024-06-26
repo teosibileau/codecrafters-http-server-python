@@ -1,8 +1,44 @@
 
 import socket
 
-HTTP_200 = b"HTTP/1.1 200 OK\r\n\r\n"
-HTTP_404 = b"HTTP/1.1 404 Not Found\r\n\r\n"
+
+class Request:
+    def __init__(self, data: bytes):
+        data = data.decode("utf-8").split("\r\n")
+        self.method, self.path, self.protocol = data[0].split(" ")
+        self.headers = {
+        }
+        for header in data[1:]:
+            if not header:
+                continue
+            key, value = header.split(": ")
+            self.headers[key] = value
+
+
+class Response:
+    def __init__(self, status_code=200, body=""):
+        codes = {
+            200: "OK",
+            404: "Not Found",
+        }
+        self.status = f"{status_code} {codes[status_code]}"
+        self.body = body
+
+    def __bytes__(self):
+        return str(self).encode("utf-8")
+
+    def __str__(self):
+        temp = f"HTTP/1.1 {self.status}\r\n"
+        if self.body:
+            temp += "Content-Type: text/plain\r\n"
+            temp += f"Content-Length: {len(self.body)}\r\n"
+            temp += "\r\n"
+            temp += self.body
+        return temp
+
+    def __repr__(self):
+        return str(self)
+
 
 def main():
     print("Logs from your program will appear here!")
@@ -12,15 +48,18 @@ def main():
     while True:
         connection, address = server_socket.accept()
         print(f"client Address: {address}")
-        data = connection.recv(1024)
-        request_data = data.decode("utf-8").split("\r\n")
+        data = connection.recv(1024)        
         if not data:
             break
-        path = request_data[0].split(" ")[1]
-        if path == "/":
-            connection.sendall(HTTP_200)
+        request = Request(data)
+
+        if request.path == "/":
+            response = Response(body="Hello World")
+        elif request.path.startswith("/echo/"):
+            response = Response(body=request.path.split("/echo/")[1])
         else:
-            connection.sendall(HTTP_404)
+            response = Response(status_code=404, body="Not found")
+        connection.sendall(bytes(response))
         connection.close()
 
 
