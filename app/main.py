@@ -12,6 +12,7 @@ class Request:
             if not header:
                 continue
             key, value = header.split(": ")
+            key = key.lower()
             self.headers[key] = value
 
 
@@ -55,6 +56,8 @@ def main():
 
         if request.path == "/":
             response = Response(body="Hello World")
+        elif request.path == "/user-agent":
+            response = Response(body=request.headers.get("user-agent", ""))
         elif request.path.startswith("/echo/"):
             response = Response(body=request.path.split("/echo/")[1])
         else:
