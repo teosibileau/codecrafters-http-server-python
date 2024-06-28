@@ -1,6 +1,9 @@
 
 import socket
 import threading
+import argparse
+import os
+
 
 class Request:
     def __init__(self, data: bytes):
@@ -17,13 +20,14 @@ class Request:
 
 
 class Response:
-    def __init__(self, status_code=200, body=""):
+    def __init__(self, status_code=200, body="", content_type="text/plain"):
         codes = {
             200: "OK",
             404: "Not Found",
         }
         self.status = f"{status_code} {codes[status_code]}"
         self.body = body
+        self.content_type = content_type
 
     def __bytes__(self):
         return str(self).encode("utf-8")
@@ -31,7 +35,7 @@ class Response:
     def __str__(self):
         temp = f"HTTP/1.1 {self.status}\r\n"
         if self.body:
-            temp += "Content-Type: text/plain\r\n"
+            temp += f"Content-Type: {self.content_type}\r\n"
             temp += f"Content-Length: {len(self.body)}\r\n"
             temp += "\r\n"
             temp += self.body
@@ -40,7 +44,8 @@ class Response:
     def __repr__(self):
         return str(self)
 
-def handle_client(connection, address):
+
+def handle_client(connection, address, cli_args):
     print(f"client Address: {address}")
     data = connection.recv(1024)
     if not data:
@@ -53,12 +58,25 @@ def handle_client(connection, address):
         response = Response(body=request.headers.get("user-agent", ""))
     elif request.path.startswith("/echo/"):
         response = Response(body=request.path.split("/echo/")[1])
+    elif request.path.startswith("/files/"):
+        files = os.listdir(cli_args.directory)
+        file_to_retrieve = request.path.split("/files/")[1]
+        if file_to_retrieve in files:
+            file_path = cli_args.directory + file_to_retrieve
+            with open(file_path, "r") as file:
+                response = Response(body=file.read(), content_type="application/octet-stream")
+        else:
+            response = Response(status_code=404, body="Not found")
     else:
         response = Response(status_code=404, body="Not found")
     connection.sendall(bytes(response))
     connection.close()
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--directory", default="/tmp/")
+    cli_args = parser.parse_args()
+
     print("Logs from your program will appear here!")
 
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
@@ -66,7 +84,7 @@ def main():
     try:
         while True:
             connection, address = server_socket.accept()
-            threading.Thread(target=handle_client, args=(connection, address)).start()
+            threading.Thread(target=handle_client, args=(connection, address, cli_args)).start()
     except KeyboardInterrupt:
         print("\nServer is shutting down.")
     finally:
