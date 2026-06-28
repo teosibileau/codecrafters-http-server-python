@@ -28,7 +28,7 @@ class Response:
         }
         self.status = f"{status_code} {codes[status_code]}"
         self.body = body
-        self.content_type = content_type
+        self.headers = {"Content-Type": content_type, "Content-Length": len(body)}
 
     def __bytes__(self):
         return str(self).encode("utf-8")
@@ -36,8 +36,8 @@ class Response:
     def __str__(self):
         temp = f"HTTP/1.1 {self.status}\r\n"
         if self.body:
-            temp += f"Content-Type: {self.content_type}\r\n"
-            temp += f"Content-Length: {len(self.body)}\r\n"
+            for header, value in self.headers.items():
+                temp += f"{header}: {value}\r\n"
             temp += "\r\n"
             temp += self.body
         return temp
@@ -52,6 +52,7 @@ class HttpServer:
         self.host = host
         self.port = port
         self.router = router
+        self.valid_encodings = ["gzip"]
 
     def handle_client(self, connection, address):
         data = connection.recv(1024)
@@ -62,11 +63,16 @@ class HttpServer:
         request = Request(data)
         handler, params = self.router.match(request.path)
 
+        compress_response = (
+            True if request.headers.get("accept-encoding", None) == "gzip" else False
+        )
         if handler:
             response = handler(request, params, self.cli_args)
         else:
             response = Response(status_code=404, body="Not found")
 
+        if compress_response:
+            response.headers["Content-Encoding"] = "gzip"
         connection.sendall(bytes(response))
         connection.close()
 
