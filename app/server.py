@@ -3,6 +3,8 @@ import threading
 
 
 class Request:
+    MULTI_VALUE_KEYS = ["accept-encoding"]
+
     def __init__(self, raw_data: bytes):
         parts = raw_data.decode("utf-8").split("\r\n\r\n")
         self.body = None
@@ -16,6 +18,8 @@ class Request:
                 continue
             key, value = header.split(": ")
             key = key.lower()
+            if key in Request.MULTI_VALUE_KEYS:
+                value = [v.strip() for v in value.split(",")]
             self.headers[key] = value
 
 
@@ -64,7 +68,7 @@ class HttpServer:
         handler, params = self.router.match(request.path)
 
         compress_response = (
-            True if request.headers.get("accept-encoding", None) == "gzip" else False
+            True if "gzip" in request.headers.get("accept-encoding", []) else False
         )
         if handler:
             response = handler(request, params, self.cli_args)
