@@ -1,5 +1,6 @@
 import socket
 import threading
+import gzip
 
 
 class Request:
@@ -77,6 +78,9 @@ class HttpServer:
 
         if compress_response:
             response.headers["Content-Encoding"] = "gzip"
+            response.body = gzip.compress(response.body)
+            response.headers["Content-Length"] = len(response.body)
+
         connection.sendall(bytes(response))
         connection.close()
 
