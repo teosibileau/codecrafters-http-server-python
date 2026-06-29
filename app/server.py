@@ -54,6 +54,9 @@ class Response:
     def mark_gzip(self):
         self.headers["Content-Encoding"] = "gzip"
 
+    def mark_closed(self):
+        self.headers["Connection"] = "close"
+
     @property
     def compress(self):
         if self.headers.get("Content-Encoding", None) == "gzip":
@@ -110,6 +113,10 @@ class HttpServer:
                 response.mark_gzip()
 
             logger.info("Response: %s", response.status)
+
+            if request.close_connection:
+                response.mark_closed()
+
             connection.sendall(bytes(response))
 
             if request.close_connection:
