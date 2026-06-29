@@ -1,10 +1,14 @@
 import socket
 import threading
 import gzip
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Request:
     MULTI_VALUE_KEYS = ["accept-encoding"]
+    HTTP11_PROTOCOL = "HTTP/1.1"
 
     def __init__(self, raw_data: bytes):
         parts = raw_data.decode("utf-8").split("\r\n\r\n")
@@ -22,6 +26,14 @@ class Request:
             if key in Request.MULTI_VALUE_KEYS:
                 value = [v.strip() for v in value.split(",")]
             self.headers[key] = value
+
+    @property
+    def is_httpv11(self):
+        return self.protocol == Request.HTTP11_PROTOCOL
+
+    @property
+    def close_connection(self):
+        return self.is_httpv11 and self.headers.get("connection", None) == "close"
 
     @property
     def compress_response(self):
@@ -79,27 +91,36 @@ class HttpServer:
         self.valid_encodings = ["gzip"]
 
     def handle_client(self, connection, address):
+        logger.info("Client connected: %s", address)
+
         data = connection.recv(1024)
 
-        if not data:
-            return
+        while data:
+            request = Request(data)
+            logger.info("%s %s", request.method, request.path)
 
-        request = Request(data)
-        handler, params = self.router.match(request.path)
+            handler, params = self.router.match(request.path)
 
-        if handler:
-            response = handler(request, params, self.cli_args)
-        else:
-            response = Response(status_code=404, body="Not found")
+            if handler:
+                response = handler(request, params, self.cli_args)
+            else:
+                response = Response(status_code=404, body="Not found")
 
-        if request.compress_response:
-            response.mark_gzip()
+            if request.compress_response:
+                response.mark_gzip()
 
-        connection.sendall(bytes(response))
-        connection.close()
+            logger.info("Response: %s", response.status)
+            connection.sendall(bytes(response))
+
+            if request.close_connection:
+                logger.info("Closing connection for %s", address)
+                connection.close()
+            else:
+                data = connection.recv(1024)
 
     def serve_forever(self):
         server_socket = socket.create_server((self.host, self.port), reuse_port=True)
+        logger.info("Server listening on %s:%d", self.host, self.port)
 
         try:
             while True:
@@ -108,7 +129,7 @@ class HttpServer:
                     target=self.handle_client, args=(connection, address)
                 ).start()
         except KeyboardInterrupt:
-            print("\nServer is shutting down.")
+            logger.info("Server is shutting down.")
         finally:
             server_socket.close()
-            print("Server has been shut down.")
+            logger.info("Server has been shut down.")

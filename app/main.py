@@ -2,9 +2,15 @@ import socket
 import threading
 import argparse
 import os
+import logging
 
 from .server import Request, Response, HttpServer
 from .router import Router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 
 def home_handler(request, params, cli_args):
@@ -52,7 +58,6 @@ def main():
     router.prefix("/echo/", echo_handler, param="message")
     router.prefix("/files/", files_handler, param="file_name")
 
-    print("Logs from your program will appear here!")
     server = HttpServer(cli_args, router, "localhost", 4221)
     server.serve_forever()
 
