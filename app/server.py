@@ -122,6 +122,7 @@ class HttpServer:
             if request.close_connection:
                 logger.info("Closing connection for %s", address)
                 connection.close()
+                data = None
             else:
                 data = connection.recv(1024)
 
