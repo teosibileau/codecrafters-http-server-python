@@ -23,6 +23,10 @@ class Request:
                 value = [v.strip() for v in value.split(",")]
             self.headers[key] = value
 
+    @property
+    def compress_response(self):
+        return True if "gzip" in self.headers.get("accept-encoding", []) else False
+
 
 class Response:
     def __init__(self, status_code=200, body="", content_type="text/plain"):
@@ -32,23 +36,38 @@ class Response:
             404: "Not Found",
         }
         self.status = f"{status_code} {codes[status_code]}"
-        self.body = body
-        self.headers = {"Content-Type": content_type, "Content-Length": len(body)}
+        self._body = body
+        self.headers = {"Content-Type": content_type}
+
+    def mark_gzip(self):
+        self.headers["Content-Encoding"] = "gzip"
+
+    @property
+    def compress(self):
+        if self.headers.get("Content-Encoding", None) == "gzip":
+            return True
+        return False
+
+    @property
+    def body(self):
+        if self.compress:
+            return gzip.compress(self._body.encode())
+        return self._body.encode()
 
     def __bytes__(self):
-        return str(self).encode("utf-8")
-
-    def __str__(self):
-        temp = f"HTTP/1.1 {self.status}\r\n"
-        if self.body:
+        response = bytes(f"HTTP/1.1 {self.status}\r\n".encode())
+        body = self.body
+        if body:
+            self.headers["Content-Length"] = len(body)
             for header, value in self.headers.items():
-                temp += f"{header}: {value}\r\n"
-            temp += "\r\n"
-            temp += self.body
-        return temp
+                response += bytes(f"{header}:{value}\r\n".encode())
+            response += b"\r\n"
+            response += body
+
+        return response
 
     def __repr__(self):
-        return str(self)
+        return bytes(self)
 
 
 class HttpServer:
@@ -68,18 +87,13 @@ class HttpServer:
         request = Request(data)
         handler, params = self.router.match(request.path)
 
-        compress_response = (
-            True if "gzip" in request.headers.get("accept-encoding", []) else False
-        )
         if handler:
             response = handler(request, params, self.cli_args)
         else:
             response = Response(status_code=404, body="Not found")
 
-        if compress_response:
-            response.headers["Content-Encoding"] = "gzip"
-            response.body = gzip.compress(response.body)
-            response.headers["Content-Length"] = len(response.body)
+        if request.compress_response:
+            response.mark_gzip()
 
         connection.sendall(bytes(response))
         connection.close()
